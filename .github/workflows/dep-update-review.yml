@@ -1,0 +1,43 @@
+name: Dependency Update Reviewer
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronized
+      - reopened
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest-xl
+    container:
+      image: diem/build_environment:main
+    name: Generate update review report
+    outputs:
+      report: ${{ steps.update_review.outputs.comment }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2.3.4
+        with:
+          head_ref: ${{ github.event.pull_request.head.sha }}
+          base_ref: ${{ github.event.pull_request.base.sha }}
+      - name: install depdive
+        # todo: change branch to main
+        run: cargo install --git https://github.com/nasifimtiazohi/whackadep --branch prcomment depdive
+      - name: run depdive
+        id: update_review
+        run: |
+          set +e
+          output="$(depdive update-review commits ./ ${{ base_ref }} ${{ head_ref }})"
+          echo "::set-output name=comment::${output}"
+
+  make-pr-comment:
+    runs-on: ubuntu-latest
+    name: Comment on PR
+    needs: generate-report
+    steps:
+      - name: make comment
+        uses: diem/actions/comment@a5fa31ff2b54a544cd88ac912cda469742592e6c
+        with:
+          comment: ${{ needs.generate-report.outputs.report }}
+          delete-older: true
